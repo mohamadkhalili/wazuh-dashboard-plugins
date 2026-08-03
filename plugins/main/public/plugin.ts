@@ -1,10 +1,26 @@
-import {
+// import {
+//   AppMountParameters,
+//   CoreSetup,
+//   CoreStart,
+//   Plugin,
+//   PluginInitializerContext,
+// } from 'opensearch_dashboards/public';
+// import {
+//   AppMountParameters,
+//   AppNavLinkStatus,
+//   CoreSetup,
+//   CoreStart,
+//   Plugin,
+//   PluginInitializerContext,
+// } from 'opensearch_dashboards/public';
+import type {
   AppMountParameters,
   CoreSetup,
   CoreStart,
   Plugin,
   PluginInitializerContext,
 } from 'opensearch_dashboards/public';
+import { AppNavLinkStatus } from '../../../src/core/public';
 import {
   setDataPlugin,
   setHttp,
@@ -52,6 +68,60 @@ import { SUPPORTED_LANGUAGES_ARRAY } from '../common/constants';
 import { registerHeaderNavControl } from './components/wz-header-nav-control/header-nav-control';
 import { registerWazuhNavLinks } from './utils/nav-groups';
 import _ from 'lodash';
+import { getDirection, resolveLocale } from 'wazuh-farsi/locale';
+import { translate as translateCommon } from 'wazuh-farsi/packs/common';
+import { isAccessibleAppRoute, isVisibleMenuApp } from './utils/menu-policy';
+
+const DISABLE_UI_NOTIFICATIONS = true;
+
+function createSilentToasts<T extends object>(toasts: T): T {
+  return new Proxy(toasts, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver);
+
+      // تمام متدهای add، مانند:
+      // addSuccess, addDanger, addWarning, addError و add
+      if (DISABLE_UI_NOTIFICATIONS && String(property).startsWith('add')) {
+        return (...args: unknown[]) => {
+          // پیام فقط در Console باقی می‌ماند و در رابط نمایش داده نمی‌شود.
+          console.debug(
+            `[notification suppressed] ${String(property)}`,
+            ...args,
+          );
+
+          return undefined;
+        };
+      }
+
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+
+function mountDevelopmentPage(element: HTMLElement): () => void {
+  const locale = resolveLocale();
+  const page = document.createElement('main');
+  page.className = 'ayyza-development-page';
+  page.setAttribute('data-test-subj', 'ayyza-development-page');
+  page.setAttribute('dir', getDirection(locale));
+  page.style.display = 'flex';
+  page.style.alignItems = 'center';
+  page.style.justifyContent = 'center';
+  page.style.minHeight = 'calc(100vh - 48px)';
+  page.style.padding = '32px';
+  page.style.textAlign = 'center';
+
+  const heading = document.createElement('h1');
+  heading.textContent = translateCommon('development', undefined, locale);
+  page.appendChild(heading);
+  element.replaceChildren(page);
+
+  return () => {
+    if (element.contains(page)) {
+      element.replaceChildren();
+    }
+  };
+}
 
 export class WazuhPlugin
   implements
@@ -142,10 +212,23 @@ export class WazuhPlugin
     for (const app of Applications) {
       const { category, id, title, redirectTo, order } = app;
 
+      const categoryDefinition = Categories.find(
+        ({ id: categoryID }) => categoryID === category,
+      );
+
+      const visibleInMenu = isVisibleMenuApp({
+        id,
+        category: categoryDefinition,
+      });
+
       core.application.register({
         id,
         title,
         order,
+        navLinkStatus: visibleInMenu
+          ? AppNavLinkStatus.visible
+          : AppNavLinkStatus.hidden,
+
         mount: async (params: AppMountParameters) => {
           try {
             setWzCurrentAppID(id);
@@ -192,9 +275,10 @@ export class WazuhPlugin
             console.debug(error);
           }
         },
-        category: Categories.find(
-          ({ id: categoryID }) => categoryID === category,
-        ),
+        // category: Categories.find(
+        //   ({ id: categoryID }) => categoryID === category,
+        // ),
+        category: categoryDefinition,
       });
     }
 
@@ -213,10 +297,9 @@ export class WazuhPlugin
     plugins: AppPluginStartDependencies,
   ): WazuhStart {
     // hide security alert
-    if (plugins.securityOss) {
-      plugins.securityOss.insecureCluster.hideAlert(true);
-    }
-
+    // if (plugins.securityOss) {
+    plugins.securityOss?.insecureCluster.hideAlert(true);
+    // }
     if (plugins?.telemetry?.telemetryNotifications?.setOptedInNoticeSeen) {
       // assign to a method to hide the telemetry banner used when the app is mounted
       this.hideTelemetryBanner = () =>
@@ -230,7 +313,7 @@ export class WazuhPlugin
     setCore(core);
     setPlugins(plugins);
     setHttp(core.http);
-    setToasts(core.notifications.toasts);
+    setToasts(createSilentToasts(core.notifications.toasts));
     setDataPlugin(plugins.data);
     setUiSettings(core.uiSettings);
     setChrome(core.chrome);

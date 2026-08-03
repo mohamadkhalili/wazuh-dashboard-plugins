@@ -72,7 +72,7 @@ export function HitsCounter({
             </strong>{' '}
             <FormattedMessage
               id='discover.hitsPluralTitle'
-              defaultMessage='{hits, plural, one {hit} other {hits}}'
+              defaultMessage='{hits, plural, one {نتیجه} other {نتیجه}}'
               values={{
                 hits,
               }}
@@ -86,7 +86,12 @@ export function HitsCounter({
                   tabIndex={0}
                   style={{ width: '19px', height: '19px', marginBottom: '2px' }}
                   type={tooltip.iconType || 'iInCircle'}
-                  aria-label={tooltip.ariaLabel || 'Info'}
+                  aria-label={
+                    tooltip.ariaLabel ||
+                    i18n.translate('discover.hitsCounter.infoAriaLabel', {
+                      defaultMessage: 'اطلاعات',
+                    })
+                  }
                 />
               </EuiToolTip>
             )}
@@ -100,12 +105,12 @@ export function HitsCounter({
               onClick={onResetQuery}
               size='s'
               aria-label={i18n.translate('discover.reloadSavedSearchButton', {
-                defaultMessage: 'Reset search',
+                defaultMessage: 'بازنشانی جستجو',
               })}
             >
               <FormattedMessage
                 id='discover.reloadSavedSearchButton'
-                defaultMessage='Reset search'
+                defaultMessage='بازنشانی جستجو'
               />
             </EuiButtonEmpty>
           </EuiFlexItem>
